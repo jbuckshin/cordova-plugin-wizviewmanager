@@ -8,13 +8,15 @@
 
 #import <Foundation/Foundation.h>
 #import <Cordova/CDVPlugin.h>
+#import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 
-@interface WizWebView : NSObject <UIWebViewDelegate> {
+@interface WizWebView : NSObject <WKNavigationDelegate> {
 }
 
-@property (nonatomic, retain) UIWebView *wizView;
+@property (nonatomic, retain) WKWebView *wizView;
 @property (nonatomic, retain) NSString *viewName;
 
-- (UIWebView *)createNewInstanceViewFromManager:(CDVPlugin *)myViewManager newBounds:(CGRect)webViewBounds viewName:(NSString *)name sourceToLoad:(NSString *)src withOptions:(NSDictionary *)options;
+- (WKWebView *)createNewInstanceViewFromManager:(CDVPlugin *)myViewManager newBounds:(CGRect)webViewBounds viewName:(NSString *)name sourceToLoad:(NSString *)src withOptions:(NSDictionary *)options;
 
 @end

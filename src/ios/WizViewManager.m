@@ -22,12 +22,12 @@ static WizViewManager *wizViewManagerInstance = NULL;
 
 - (void) pluginInitialize {
 
-    UIWebView* theWebView = (UIWebView*)self.webView;
+    WKWebView* theWebView = (WKWebView*)self.webView;
     
     originalWebViewBounds = theWebView.bounds;
     
-    self.webviewDelegate = theWebView.delegate;
-    theWebView.delegate = self;
+    self.webviewDelegate = theWebView.navigationDelegate; // TODO: crap, not needed!! jb
+    theWebView.navigationDelegate = self;
         
     wizViewManagerInstance = self;
     
@@ -52,7 +52,12 @@ static WizViewManager *wizViewManagerInstance = NULL;
     // (We dont need to do this earlier,only for the name mainView
     // to window.name when we are using wizViewManager)
     NSString *js = [NSString stringWithFormat:@"window.name = '%@'", @"mainView"];
-    [theWebView stringByEvaluatingJavaScriptFromString:js];   
+    //[theWebView stringByEvaluatingJavaScriptFromString:js];
+    [theWebView evaluateJavaScript:js completionHandler:^(NSString *result, NSError *error)
+    {
+        NSLog(@"Error %@",error);
+        NSLog(@"Result %@",result);
+    }];
     
     // this holds callbacks for each view
     viewLoadedCallbackId = [[NSMutableDictionary alloc ] init];
@@ -117,9 +122,15 @@ static WizViewManager *wizViewManagerInstance = NULL;
         // Found view send message
 
         // Update wizViewManager.views
-        UIWebView *targetWebView = [wizViewList objectForKey:key];
-        [targetWebView stringByEvaluatingJavaScriptFromString:
-                                   [NSString stringWithFormat:@"window.wizViewManager.updateViewList([%@]);", viewNamesString]];
+        WKWebView *targetWebView = [wizViewList objectForKey:key];
+        //[targetWebView stringByEvaluatingJavaScriptFromString:
+        //                           [NSString stringWithFormat:@"window.wizViewManager.updateViewList([%@]);", viewNamesString]];
+        
+        [targetWebView evaluateJavaScript:[NSString stringWithFormat:@"window.wizViewManager.updateViewList([%@]);", viewNamesString] completionHandler:^(NSString *result, NSError *error)
+        {
+            NSLog(@"Error %@",error);
+            NSLog(@"Result %@",result);
+        }];
     }
     [viewNames release];
     
@@ -143,7 +154,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
     [viewLoadedCallbackId setObject:command.callbackId forKey:[NSString stringWithFormat:@"%@_updateCallback", viewName]];
 
     // Create a new wizWebView with options (if specified)
-    UIWebView *newWizView;
+    WKWebView *newWizView;
 
     if (options) {
 
@@ -294,7 +305,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
     CDVPluginResult *pluginResultOK = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     
     if ([wizViewList objectForKey:viewName]) {
-        UIWebView *targetWebView = [wizViewList objectForKey:viewName];
+        WKWebView *targetWebView = [wizViewList objectForKey:viewName];
 
         WizLog(@"[WizViewManager] ******* hideView animating Views : %@ is hidden? %i", isAnimating, !targetWebView.isHidden);
 
@@ -438,7 +449,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
     CDVPluginResult *pluginResultOK = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
 
     if ([wizViewList objectForKey:viewName]) {
-        UIWebView *targetWebView = [wizViewList objectForKey:viewName];
+        WKWebView *targetWebView = [wizViewList objectForKey:viewName];
 
         WizLog(@"[WizViewManager] ******* showView animating object : %@ is hidden? %i", isAnimating, targetWebView.isHidden);
 
@@ -581,7 +592,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
             // to return later once finished parsing script
             [viewLoadedCallbackId setObject:command.callbackId forKey:[NSString stringWithFormat:@"%@_viewLoadedCallback", viewName]];
 
-            UIWebView *targetWebView = [wizViewList objectForKey:viewName];
+            WKWebView *targetWebView = [wizViewList objectForKey:viewName];
 
             // Check source content
             if ([self validateUrl:src]) {
@@ -691,12 +702,12 @@ static WizViewManager *wizViewManagerInstance = NULL;
     if ([wizViewList objectForKey:viewName]) {
 
         // Get the view from the view list
-        UIWebView *targetWebView = [wizViewList objectForKey:viewName];
+        WKWebView *targetWebView = [wizViewList objectForKey:viewName];
         // Load empty text into view
         [targetWebView loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"data:text/plain;,"]]];
         // Remove the view!
         [targetWebView removeFromSuperview];
-        targetWebView.delegate = nil;
+        targetWebView.navigationDelegate = nil;
         [targetWebView release];
         targetWebView = nil;
 
@@ -725,7 +736,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
     CGRect screenRect = [[UIScreen mainScreen] bounds];
     int screenHeight;
     int screenWidth;
-    if (UIDeviceOrientationIsLandscape(self.viewController.interfaceOrientation)) {
+    if (UIDeviceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation])) {
         if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_7_1) {
             screenHeight = (int) screenRect.size.height;
             screenWidth = (int) screenRect.size.width;
@@ -817,7 +828,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
     if ([wizViewList objectForKey:viewName]) {
 
         // SetLayout UIWebView
-        UIWebView *targetWebView = [wizViewList objectForKey:viewName];
+        WKWebView *targetWebView = [wizViewList objectForKey:viewName];
 
         CGRect newRect = [self frameWithOptions:options];
         if (targetWebView.isHidden) {
@@ -845,8 +856,14 @@ static WizViewManager *wizViewManagerInstance = NULL;
         NSString *postDataEscaped = [message stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
 
         // Message UIWebView
-        UIWebView *targetWebView = [wizViewList objectForKey:viewName];
-        [targetWebView stringByEvaluatingJavaScriptFromString:[NSString stringWithFormat:@"wizMessageReceiver(window.decodeURIComponent('%@'));", postDataEscaped]];
+        WKWebView *targetWebView = [wizViewList objectForKey:viewName];
+        //[targetWebView stringByEvaluatingJavaScriptFromString:[NSString stringWithFormat:@"wizMessageReceiver(window.decodeURIComponent('%@'));", postDataEscaped]];
+        
+        [targetWebView evaluateJavaScript:[NSString stringWithFormat:@"wizMessageReceiver(window.decodeURIComponent('%@'));", postDataEscaped] completionHandler:^(NSString *result, NSError *error)
+        {
+            NSLog(@"Error %@",error);
+            NSLog(@"Result %@",result);
+        }];
 
     } else {
         WizLog(@"Message failed! View not found!");
@@ -1421,19 +1438,95 @@ static WizViewManager *wizViewManagerInstance = NULL;
  * Extend CordovaView URL request handler
  *
  */
-- (void)webViewDidStartLoad:(UIWebView *)theWebView {
-    return [self.webviewDelegate webViewDidStartLoad:theWebView];
+- (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation {
+    NSLog(@"didCommitNavigation: %@", navigation);
+}
+//- (void)webViewDidStartLoad:(WKWebView *)theWebView {
+//    return [self.webviewDelegate webViewDidStartLoad:theWebView];
+//}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation: (WKNavigation *)navigation{
+    //[UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    NSLog(@"didFinish: %@; stillLoading:%@", [webView URL], (webView.loading?@"NO":@"YES"));
 }
 
-- (void)webViewDidFinishLoad:(UIWebView *)theWebView {
-    return [self.webviewDelegate webViewDidFinishLoad:theWebView];
+//- (void)webViewDidFinishLoad:(WKWebView *)theWebView {
+//    return [self.webviewDelegate webViewDidFinishLoad:theWebView];
+//}
+
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {
+    NSLog(@"didFailNavigation: %@, error %@", navigation, error);
 }
 
-- (void)webView:(UIWebView *)theWebView didFailLoadWithError:(NSError *)error {
-    return [self.webviewDelegate webView:theWebView didFailLoadWithError:error];
+//- (void)webView:(WKWebView *)theWebView didFailLoadWithError:(NSError *)error {
+//    return [self.webviewDelegate webView:theWebView didFailLoadWithError:error];
+//}
+
+//UIWebViewDelegate     - webView:shouldStartLoadWithRequest:navigationType:
+-(void)webView:(WKWebView *)theWebView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+{
+    
+
+     // If get this request reboot...
+     NSString *requestString = [[navigationAction.request URL] absoluteString];
+     NSArray *prefixer = [requestString componentsSeparatedByString:@":"];
+         
+     // Do insensitive compare to support SDK >5
+     if ([(NSString *)[prefixer objectAtIndex:0] caseInsensitiveCompare:@"rebootapp"] == 0) {
+         
+         // Perform restart a second later
+         [self performSelector:@selector(timedRestart:) withObject:theWebView afterDelay:1.0f];
+         
+         decisionHandler(WKNavigationActionPolicyCancel);
+         
+     } else if ([(NSString*)[prefixer objectAtIndex:0] caseInsensitiveCompare:@"wizPostMessage"] == 0) {
+         
+         NSArray *requestComponents = [requestString componentsSeparatedByString:@"://"];
+         NSString *postMessage = [[NSString alloc] initWithString:(NSString*)[requestComponents objectAtIndex:1]];
+         
+         NSArray *messageComponents = [postMessage componentsSeparatedByString:@"?"];
+         
+         NSString *originView = [[NSString alloc] initWithString:(NSString*)[messageComponents objectAtIndex:0]];
+         NSString *targetView = [[NSString alloc] initWithString:(NSString*)[messageComponents objectAtIndex:1]];
+         NSString *data = [[NSString alloc] initWithString:(NSString*)[messageComponents objectAtIndex:2]];
+         NSString *type = [[NSString alloc] initWithString:(NSString*)[messageComponents objectAtIndex:3]];
+         
+         NSLog(@"[WizWebView] ******* targetView is:  %@", targetView );
+                
+         // NSLog(@"[AppDelegate wizMessageView()] ******* postData is:  %@", postData );
+         
+         NSMutableDictionary *viewList = [[NSMutableDictionary alloc] initWithDictionary:[WizViewManager getViews]];
+
+         WKWebView *targetWebView = [viewList objectForKey:targetView];
+         NSString *js = [NSString stringWithFormat:@"wizViewMessenger.__triggerMessageEvent(\"%@\", \"%@\", \"%@\", \"%@\");", originView, targetView, data, type];
+         //[targetWebView stringByEvaluatingJavaScriptFromString:js];
+         [targetWebView evaluateJavaScript:js completionHandler:^(NSString *result, NSError *error)
+         {
+             NSLog(@"Error %@",error);
+             NSLog(@"Result %@",result);
+         }];
+
+             // WizLog(@"[AppDelegate wizMessageView()] ******* current views... %@", viewList);
+
+         [postMessage release];
+         postMessage = nil;
+         [originView release];
+         [targetView release];
+         [data release];
+         [viewList release];
+
+         decisionHandler(WKNavigationActionPolicyCancel);;
+         
+      } else {
+         // let Cordova handle everything else
+         return decisionHandler(WKNavigationActionPolicyAllow); // TODO: was call super
+     }
+
+
 }
 
-- (BOOL)webView:(UIWebView *)theWebView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType {
+/*
+- (BOOL)webView:(WKWebView *)theWebView shouldStartLoadWithRequest:(NSURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType {  // jb TODO: navigation
 
     BOOL superValue = [ self.webviewDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType ];
 
@@ -1467,7 +1560,7 @@ static WizViewManager *wizViewManagerInstance = NULL;
         
         NSMutableDictionary *viewList = [[NSMutableDictionary alloc] initWithDictionary:[WizViewManager getViews]];
 
-        UIWebView *targetWebView = [viewList objectForKey:targetView];
+        WKWebView *targetWebView = [viewList objectForKey:targetView];
         NSString *js = [NSString stringWithFormat:@"wizViewMessenger.__triggerMessageEvent(\"%@\", \"%@\", \"%@\", \"%@\");", originView, targetView, data, type];
         [targetWebView stringByEvaluatingJavaScriptFromString:js];
 
@@ -1489,7 +1582,10 @@ static WizViewManager *wizViewManagerInstance = NULL;
 
 }
 
-- (void)timedRestart:(UIWebView *)theWebView {
+ */
+
+
+- (void)timedRestart:(WKWebView *)theWebView {
     // Gives time for our JS method to execute splash
 
     // Resize mainView to normal

@@ -9,6 +9,7 @@
 #import "WizWebView.h"
 #import "WizViewManager.h"
 
+
 @implementation WizWebView
 
 @synthesize wizView, viewName;
@@ -16,26 +17,78 @@
 static CDVPlugin *viewManager;
 
 - (void)dealloc {
-    wizView.delegate = nil;
+    wizView.navigationDelegate = nil;
     [super dealloc];
 }
 
 - (void) viewDidLoad
 {
-    wizView.delegate = self;
+    wizView.navigationDelegate = self;
 }
 
 - (NSDictionary *)throwError:(int)errorCode description:(NSString *)description {
     return @{ @"code": [NSNumber numberWithInt:errorCode], @"message": description };
 }
 
-- (UIWebView *)createNewInstanceViewFromManager:(CDVPlugin *)myViewManager newBounds:(CGRect)webViewBounds viewName:(NSString *)name sourceToLoad:(NSString *)src withOptions:(NSDictionary *)options {
+- (WKWebView *)createNewInstanceViewFromManager:(CDVPlugin *)myViewManager newBounds:(CGRect)webViewBounds viewName:(NSString *)name sourceToLoad:(NSString *)src withOptions:(NSDictionary *)options {
     
     viewName = name;
     viewManager = myViewManager;
     
-    wizView = [[UIWebView alloc] initWithFrame:webViewBounds];
-    wizView.delegate = self;
+
+    
+    // Set scales to fit setting based on Cordova settings.
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"Cordova" ofType:@"plist"];
+    NSMutableDictionary *cordovaConfig = [NSMutableDictionary dictionaryWithContentsOfFile:path];
+    if ([options objectForKey:@"scalesPageToFit"]) {
+        
+        //wizView.scalesPageToFit = [[options objectForKey:@"scalesPageToFit"] boolValue];
+        
+        // TODO: intended behavior? jb
+        NSString *jScript = @"var meta = document.createElement('meta'); meta.setAttribute('name', 'viewport'); meta.setAttribute('content', 'width=device-width'); document.getElementsByTagName('head')[0].appendChild(meta);";
+
+        WKUserScript *wkUScript = [[WKUserScript alloc] initWithSource:jScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
+        WKUserContentController *wkUController = [[WKUserContentController alloc] init];
+        [wkUController addUserScript:wkUScript];
+
+        WKWebViewConfiguration *wkWebConfig = [[WKWebViewConfiguration alloc] init];
+        wkWebConfig.userContentController = wkUController;
+
+        wizView = [[WKWebView alloc] initWithFrame:webViewBounds configuration:wkWebConfig];
+        // TODO: stop
+        
+    } else {
+        NSNumber *scaleToFit = [cordovaConfig objectForKey:@"EnableViewportScale"];
+        if (scaleToFit) {
+            //wizView.scalesPageToFit = [scaleToFit boolValue];
+            
+            // TODO: intended behavior? jb
+            NSString *jScript = @"var meta = document.createElement('meta'); meta.setAttribute('name', 'viewport'); meta.setAttribute('content', 'width=device-width'); document.getElementsByTagName('head')[0].appendChild(meta);";
+
+            WKUserScript *wkUScript = [[WKUserScript alloc] initWithSource:jScript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
+            WKUserContentController *wkUController = [[WKUserContentController alloc] init];
+            [wkUController addUserScript:wkUScript];
+
+            WKWebViewConfiguration *wkWebConfig = [[WKWebViewConfiguration alloc] init];
+            wkWebConfig.userContentController = wkUController;
+
+            wizView = [[WKWebView alloc] initWithFrame:webViewBounds configuration:wkWebConfig];
+            // TODO: stop
+            
+            
+            
+            
+        } else {
+            //wizView.scalesPageToFit = NO;
+            NSLog(@"[WizWebView] ******* WARNING  - EnableViewportScale was not specified in Cordova.plist");
+            
+            wizView = [[WKWebView alloc] initWithFrame:webViewBounds];
+
+            
+        }
+    }
+
+    wizView.navigationDelegate = self;
     wizView.multipleTouchEnabled   = YES;
     wizView.autoresizesSubviews    = YES;
     wizView.hidden                 = NO;
@@ -43,21 +96,6 @@ static CDVPlugin *viewManager;
     wizView.opaque = NO;
     wizView.alpha = 0;
     
-    // Set scales to fit setting based on Cordova settings.
-    NSString *path = [[NSBundle mainBundle] pathForResource:@"Cordova" ofType:@"plist"];
-    NSMutableDictionary *cordovaConfig = [NSMutableDictionary dictionaryWithContentsOfFile:path];
-    if ([options objectForKey:@"scalesPageToFit"]) {
-        wizView.scalesPageToFit = [[options objectForKey:@"scalesPageToFit"] boolValue];
-    } else {
-        NSNumber *scaleToFit = [cordovaConfig objectForKey:@"EnableViewportScale"];
-        if (scaleToFit) {
-            wizView.scalesPageToFit = [scaleToFit boolValue];
-        } else {
-            wizView.scalesPageToFit = NO;
-            NSLog(@"[WizWebView] ******* WARNING  - EnableViewportScale was not specified in Cordova.plist");
-        }
-    }
-
     // Set bounces setting based on option settings.
     if ([options objectForKey:@"bounces"]) {
         wizView.scrollView.bounces = [[options objectForKey:@"bounces"] boolValue];
@@ -150,7 +188,11 @@ static CDVPlugin *viewManager;
     return [lowerCased hasPrefix:@"http://"] || [lowerCased hasPrefix:@"https://"];
 }
 
-- (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error {
+//- (void)webView:(UIWebView *)webView didFailLoadWithError:(NSError *)error {
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error {
+  
+    NSLog(@"didFailNavigation: %@, error %@", navigation, error);
+
 
     if (error.code == -999) {
         // Ignore this code. It's thrown when the UIWebView is asked to load new content before finishing to load previous request
@@ -179,8 +221,14 @@ static CDVPlugin *viewManager;
     [callbackDict release];
 }
 
-- (void)webViewDidFinishLoad:(UIWebView *)theWebView {
-	// view is loaded
+
+//- (void)webViewDidFinishLoad:(WKWebView *)theWebView {
+- (void)webView:(WKWebView *)theWebView didFinishNavigation: (WKNavigation *)navigation{
+    
+    //[UIApplication sharedApplication].networkActivityIndicatorVisible = NO;
+    NSLog(@"didFinish: %@; stillLoading:%@", [theWebView URL], (theWebView.loading?@"NO":@"YES"));
+    
+    // view is loaded
     WizLog(@"[WizWebView] ******* webViewDidFinishLoad" );
 
     // to send data straight to mainView onLoaded via phonegap callback
@@ -216,10 +264,18 @@ static CDVPlugin *viewManager;
     NSMutableDictionary *viewList = [[NSMutableDictionary alloc] initWithDictionary:[WizViewManager getViews]];
     for (NSString *key in viewList) {
         if ([[viewList objectForKey:key] isMemberOfClass:[UIWebView class]]) {
-            UIWebView *targetWebView = [viewList objectForKey:key];
+            WKWebView *targetWebView = [viewList objectForKey:key];
             if ([targetWebView isEqual:theWebView]) {
                 NSString *js = [NSString stringWithFormat:@"window.name = '%@'", key];
-                [theWebView stringByEvaluatingJavaScriptFromString:js];
+                
+                
+                
+                ///[theWebView stringByEvaluatingJavaScriptFromString:js];
+                [theWebView evaluateJavaScript:js completionHandler:^(NSString *result, NSError *error)
+                {
+                    NSLog(@"Error %@",error);
+                    NSLog(@"Result %@",result);
+                }];
             }
         }
     }
@@ -290,12 +346,20 @@ static CDVPlugin *viewManager;
  \
     window.wizViewMessenger = new WizViewMessenger(); ";
     
-    [theWebView stringByEvaluatingJavaScriptFromString:js];
+    //[theWebView stringByEvaluatingJavaScriptFromString:js];
+    [theWebView evaluateJavaScript:js completionHandler:^(NSString *result, NSError *error)
+    {
+        NSLog(@"Error %@",error);
+        NSLog(@"Result %@",result);
+    }];
 }
 
-- (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSMutableURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType {
+//- (BOOL)webView:(WKWebView *)webView shouldStartLoadWithRequest:(NSMutableURLRequest *)request navigationType:(UIWebViewNavigationType)navigationType { // TODO: jb navigation
     
-    NSString *requestString = [[request URL] absoluteString];
+-(void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+    {
+    
+    NSString *requestString = [[navigationAction.request URL] absoluteString];
     // get prefix
     NSArray *prefixer = [requestString componentsSeparatedByString:@":"];
     // NSLog(@"[WizWebView] ******* prefixer is:  %@", prefixer );
@@ -321,9 +385,14 @@ static CDVPlugin *viewManager;
         
         if ([viewList objectForKey:targetView]) {
             
-            UIWebView *targetWebView = [viewList objectForKey:targetView];
+            WKWebView *targetWebView = [viewList objectForKey:targetView];
             NSString *js = [NSString stringWithFormat:@"wizViewMessenger.__triggerMessageEvent(\"%@\", \"%@\", \"%@\", \"%@\");", originView, targetView, data, type];
-            [targetWebView stringByEvaluatingJavaScriptFromString:js];
+            //[targetWebView stringByEvaluatingJavaScriptFromString:js];
+            [targetWebView evaluateJavaScript:js completionHandler:^(NSString *result, NSError *error)
+            {
+                NSLog(@"Error %@",error);
+                NSLog(@"Result %@",result);
+            }];
 
             // WizLog(@"[AppDelegate wizMessageView()] ******* current views... %@", viewList);
         }
@@ -335,12 +404,12 @@ static CDVPlugin *viewManager;
         [data release];
         [viewList release];
         
-        return NO;
+        decisionHandler(WKNavigationActionPolicyCancel);
         
  	}
     
     // Accept any other URLs
-	return YES;
+	return decisionHandler(WKNavigationActionPolicyAllow);
 }
 
 @end

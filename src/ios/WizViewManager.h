@@ -8,14 +8,16 @@
 
 #import <Foundation/Foundation.h>
 #import <Cordova/CDVPlugin.h>
+#import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 
-@interface WizViewManager : CDVPlugin <UIWebViewDelegate> {
+@interface WizViewManager : CDVPlugin <WKNavigationDelegate> {
     CGRect originalWebViewBounds;
 }
 
 @property (nonatomic, retain) NSString *showViewCallbackId;
 @property (nonatomic, retain) NSString *hideViewCallbackId;
-@property (nonatomic, readwrite, assign) id<UIWebViewDelegate> webviewDelegate;
+@property (nonatomic, readwrite, assign) id<WKNavigationDelegate> webviewDelegate;
 @property (nonatomic, retain) NSArray *supportedFileList;
 
 + (NSMutableDictionary *)getViews;
@@ -44,7 +46,7 @@
 - (void)sendMessage:(NSString *)viewName withMessage:(NSString *)message;
 - (void)updateViewList;
 - (BOOL)validateFileExtension:(NSString *)candidate;
-- (void)timedRestart:(UIWebView *)theWebView;
+- (void)timedRestart:(WKWebView *)theWebView;
 
 /**
  
